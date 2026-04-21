@@ -116,8 +116,17 @@ const Index = () => {
 
         <section className="mt-12 paper p-6 text-center text-sm text-muted-foreground">
           <Users className="mx-auto mb-2 h-5 w-5" />
-          Each test pulls a random passage with 5 timed questions.
+          Each test pulls a random 20-paragraph passage with 10 timed questions.
         </section>
+
+        <div className="mt-6 text-center">
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/admin/generate">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Generate a new passage with AI
+            </Link>
+          </Button>
+        </div>
       </main>
     </div>
   );
