@@ -20,6 +20,7 @@ interface Member {
   user_id: string;
   joined_at: string;
   display_name: string;
+  completed: boolean;
 }
 
 export default function Lobby() {
@@ -55,17 +56,22 @@ export default function Lobby() {
     if (!room) return;
 
     const loadMembers = async () => {
-      const { data } = await supabase
-        .from("room_members")
-        .select("user_id, joined_at, profiles(display_name)")
-        .eq("room_id", room.id)
-        .order("joined_at", { ascending: true });
-      if (data) {
+      const [{ data: rows }, { data: doneAttempts }] = await Promise.all([
+        supabase
+          .from("room_members")
+          .select("user_id, joined_at, profiles!room_members_user_id_profiles_fkey(display_name)")
+          .eq("room_id", room.id)
+          .order("joined_at", { ascending: true }),
+        supabase.from("attempts").select("user_id").eq("room_id", room.id),
+      ]);
+      const completedSet = new Set((doneAttempts ?? []).map((a: any) => a.user_id));
+      if (rows) {
         setMembers(
-          data.map((m: any) => ({
+          rows.map((m: any) => ({
             user_id: m.user_id,
             joined_at: m.joined_at,
             display_name: m.profiles?.display_name ?? "Player",
+            completed: completedSet.has(m.user_id),
           }))
         );
       }
@@ -77,6 +83,11 @@ export default function Lobby() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "room_members", filter: `room_id=eq.${room.id}` },
+        () => loadMembers()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "attempts", filter: `room_id=eq.${room.id}` },
         () => loadMembers()
       )
       .on(
@@ -171,6 +182,17 @@ export default function Lobby() {
                     <span className="text-xs text-muted-foreground">(you)</span>
                   )}
                 </div>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    m.completed
+                      ? "bg-success/15 text-success"
+                      : room.status === "started"
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {m.completed ? "Completed" : room.status === "started" ? "In test" : "Joined"}
+                </span>
               </li>
             ))}
           </ul>

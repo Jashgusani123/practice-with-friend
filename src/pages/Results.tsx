@@ -50,7 +50,7 @@ export default function Results() {
       // Leaderboard
       const { data: attempts } = await supabase
         .from("attempts")
-        .select("user_id, score, total, submitted_at, profiles(display_name)")
+        .select("user_id, score, total, submitted_at, profiles!attempts_user_id_profiles_fkey(display_name)")
         .eq("room_id", room.id)
         .order("score", { ascending: false })
         .order("submitted_at", { ascending: true });
@@ -109,7 +109,7 @@ export default function Results() {
         async () => {
           const { data: attempts } = await supabase
             .from("attempts")
-            .select("user_id, score, total, submitted_at, profiles(display_name)")
+            .select("user_id, score, total, submitted_at, profiles!attempts_user_id_profiles_fkey(display_name)")
             .eq("room_id", roomId)
             .order("score", { ascending: false })
             .order("submitted_at", { ascending: true });
