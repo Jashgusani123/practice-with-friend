@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { createRoom, joinRoom } from "@/lib/room";
 import { toast } from "sonner";
-import { Users, PlusCircle, LogIn } from "lucide-react";
+import { Users, PlusCircle, LogIn, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Index = () => {
   const { user } = useAuth();
