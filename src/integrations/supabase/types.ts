@@ -95,23 +95,70 @@ export type Database = {
           },
         ]
       }
+      highlights: {
+        Row: {
+          attempt_id: string
+          created_at: string
+          end_offset: number
+          id: string
+          paragraph_index: number
+          start_offset: number
+          text: string
+          user_id: string
+        }
+        Insert: {
+          attempt_id: string
+          created_at?: string
+          end_offset: number
+          id?: string
+          paragraph_index: number
+          start_offset: number
+          text: string
+          user_id: string
+        }
+        Update: {
+          attempt_id?: string
+          created_at?: string
+          end_offset?: number
+          id?: string
+          paragraph_index?: number
+          start_offset?: number
+          text?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "highlights_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "attempts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       passages: {
         Row: {
           content: string
           created_at: string
+          difficulty: string
           id: string
+          paragraphs: Json | null
           title: string
         }
         Insert: {
           content: string
           created_at?: string
+          difficulty?: string
           id?: string
+          paragraphs?: Json | null
           title: string
         }
         Update: {
           content?: string
           created_at?: string
+          difficulty?: string
           id?: string
+          paragraphs?: Json | null
           title?: string
         }
         Relationships: []
@@ -133,6 +180,45 @@ export type Database = {
           id?: string
         }
         Relationships: []
+      }
+      question_marks: {
+        Row: {
+          attempt_id: string
+          created_at: string
+          id: string
+          question_id: string
+          user_id: string
+        }
+        Insert: {
+          attempt_id: string
+          created_at?: string
+          id?: string
+          question_id: string
+          user_id: string
+        }
+        Update: {
+          attempt_id?: string
+          created_at?: string
+          id?: string
+          question_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "question_marks_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "question_marks_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       questions: {
         Row: {
