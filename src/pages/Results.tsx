@@ -52,6 +52,7 @@ export default function Results() {
         .from("attempts")
         .select("user_id, score, total, submitted_at, profiles!attempts_user_id_profiles_fkey(display_name)")
         .eq("room_id", room.id)
+        .gt("total", 0)
         .order("score", { ascending: false })
         .order("submitted_at", { ascending: true });
 
@@ -111,6 +112,7 @@ export default function Results() {
             .from("attempts")
             .select("user_id, score, total, submitted_at, profiles!attempts_user_id_profiles_fkey(display_name)")
             .eq("room_id", roomId)
+            .gt("total", 0)
             .order("score", { ascending: false })
             .order("submitted_at", { ascending: true });
           if (attempts) {

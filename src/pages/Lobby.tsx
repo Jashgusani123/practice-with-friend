@@ -62,7 +62,7 @@ export default function Lobby() {
           .select("user_id, joined_at, profiles!room_members_user_id_profiles_fkey(display_name)")
           .eq("room_id", room.id)
           .order("joined_at", { ascending: true }),
-        supabase.from("attempts").select("user_id").eq("room_id", room.id),
+        supabase.from("attempts").select("user_id").eq("room_id", room.id).gt("total", 0),
       ]);
       const completedSet = new Set((doneAttempts ?? []).map((a: any) => a.user_id));
       if (rows) {

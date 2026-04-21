@@ -11,6 +11,7 @@ import Lobby from "./pages/Lobby.tsx";
 import Test from "./pages/Test.tsx";
 import Results from "./pages/Results.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import AdminGenerate from "./pages/AdminGenerate.tsx";
 
 const queryClient = new QueryClient();
 
