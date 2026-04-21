@@ -11,11 +11,12 @@ export function generateRoomCode(): string {
   return code;
 }
 
-export async function createRoom(hostId: string, durationSeconds = 600) {
-  // Pick a random passage
+export async function createRoom(hostId: string, durationSeconds = 1800) {
+  // Pick a random long-form passage (only those with the new paragraph format)
   const { data: passages, error: pErr } = await supabase
     .from("passages")
-    .select("id");
+    .select("id")
+    .not("paragraphs", "is", null);
   if (pErr) throw pErr;
   if (!passages?.length) throw new Error("No passages available");
   const passage = passages[Math.floor(Math.random() * passages.length)];
