@@ -56,6 +56,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/admin/generate" element={<AdminGenerate />} />  
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

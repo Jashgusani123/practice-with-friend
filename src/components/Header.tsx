@@ -13,7 +13,7 @@ export default function Header() {
         <Link to="/" className="flex items-center gap-2">
           <GraduationCap className="h-6 w-6 text-primary" />
           <span className="font-serif text-xl font-bold text-primary">
-            DDCET MockTest
+            PrectiseUP
           </span>
         </Link>
         <nav className="flex items-center gap-3">

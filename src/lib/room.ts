@@ -1,7 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
 
-// Room logic kept modular so realtime/Socket.IO style upgrades stay localized.
-
 export function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -11,41 +9,116 @@ export function generateRoomCode(): string {
   return code;
 }
 
-export async function createRoom(hostId: string, durationSeconds = 1800) {
-  // Pick a random long-form passage (only those with the new paragraph format)
-  const { data: passages, error: pErr } = await supabase
-    .from("passages")
-    .select("id")
-    .not("paragraphs", "is", null);
-  if (pErr) throw pErr;
-  if (!passages?.length) throw new Error("No passages available");
-  const passage = passages[Math.floor(Math.random() * passages.length)];
 
-  // Try a few codes in case of unique collision
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = generateRoomCode();
-    const { data, error } = await supabase
-      .from("rooms")
-      .insert({
-        code,
-        host_id: hostId,
-        passage_id: passage.id,
-        duration_seconds: durationSeconds,
-      })
-      .select()
-      .single();
 
-    if (!error && data) {
-      // Auto-join host as member
-      await supabase.from("room_members").insert({
-        room_id: data.id,
-        user_id: hostId,
-      });
-      return data;
-    }
-    if (error && !error.message.includes("duplicate")) throw error;
+export async function createRoom(
+  hostId: string,
+  subject: string,
+  chapter: string | null,
+  durationSeconds = 1800
+) {
+  const code = generateRoomCode();
+
+  // =========================
+  // 1. FETCH ALL QUESTIONS
+  // =========================
+  let query = supabase
+    .from("questions")
+    .select("id, passage_id")
+    .eq("subject", subject.toLowerCase());
+
+  if (chapter && chapter !== "ALL") {
+    query = query.eq("chapter", chapter.toLowerCase());
   }
-  throw new Error("Could not generate unique room code");
+
+  const { data: allQuestions, error: qErr } = await query;
+
+  if (qErr) throw qErr;
+  if (!allQuestions || allQuestions.length === 0) {
+    throw new Error("No questions available for this selection");
+  }
+
+  // =========================
+  // 2. REMOVE ALREADY ATTEMPTED (🔥 HISTORY)
+  // =========================
+  const { data: history } = await supabase
+    .from("user_question_history")
+    .select("question_id")
+    .eq("user_id", hostId);
+
+  const usedIds = history?.map((h) => h.question_id) || [];
+
+  const availableQuestions = allQuestions.filter(
+    (q) => !usedIds.includes(q.id)
+  );
+
+  if (availableQuestions.length === 0) {
+    throw new Error("No new questions available (all attempted)");
+  }
+
+  // =========================
+  // 3. RANDOMIZE & PICK 15
+  // =========================
+  const shuffled = [...availableQuestions].sort(() => Math.random() - 0.5);
+
+  const selectedQuestions = shuffled.slice(0, 10);
+
+  // =========================
+  // 4. DETECT PASSAGE (ENGLISH ONLY)
+  // =========================
+  let passageId: string | null = null;
+
+  if (subject.toLowerCase() === "english") {
+    const withPassage = selectedQuestions.find((q) => q.passage_id);
+    if (withPassage) {
+      passageId = withPassage.passage_id;
+    }
+  }
+
+  // =========================
+  // 5. CREATE ROOM
+  // =========================
+  const { data: newRoom, error: roomErr } = await supabase
+    .from("rooms")
+    .insert({
+      code,
+      host_id: hostId,
+      subject: subject.toLowerCase(),
+      chapter: chapter === "ALL" ? null : chapter?.toLowerCase() || null,
+      passage_id: passageId,
+      duration_seconds: durationSeconds,
+      status: "waiting",
+    })
+    .select()
+    .single();
+
+  if (roomErr) throw roomErr;
+
+  // =========================
+  // 6. SAVE ROOM QUESTIONS
+  // =========================
+  const roomQuestions = selectedQuestions.map((q, index) => ({
+    room_id: newRoom.id,
+    question_id: q.id,
+    order_index: index,
+  }));
+
+  const { error: rqErr } = await supabase
+    .from("room_questions")
+    .insert(roomQuestions);
+
+  if (rqErr) throw rqErr;
+
+  // =========================
+  // 7. ADD HOST AS PARTICIPANT
+  // =========================
+  await supabase.from("room_participants").insert({
+    room_id: newRoom.id,
+    user_id: hostId,
+    status: "joined",
+  });
+
+  return newRoom;
 }
 
 export async function joinRoom(code: string, userId: string) {
@@ -54,14 +127,19 @@ export async function joinRoom(code: string, userId: string) {
     .select("*")
     .eq("code", code.toUpperCase())
     .maybeSingle();
+
   if (error) throw error;
   if (!room) throw new Error("Room not found");
-  if (room.status === "finished") throw new Error("This room has ended");
+  if (room.status === "finished") throw new Error("Room ended");
 
-  // Insert membership (idempotent via unique constraint)
   const { error: mErr } = await supabase
-    .from("room_members")
-    .insert({ room_id: room.id, user_id: userId });
+    .from("room_participants")
+    .insert({
+      room_id: room.id,
+      user_id: userId,
+      status: "joined",
+    });
+
   if (mErr && !mErr.message.includes("duplicate")) throw mErr;
 
   return room;
@@ -70,7 +148,11 @@ export async function joinRoom(code: string, userId: string) {
 export async function startRoom(roomId: string) {
   const { error } = await supabase
     .from("rooms")
-    .update({ status: "started", started_at: new Date().toISOString() })
+    .update({
+      status: "started",
+      started_at: new Date().toISOString(),
+    })
     .eq("id", roomId);
+
   if (error) throw error;
 }
