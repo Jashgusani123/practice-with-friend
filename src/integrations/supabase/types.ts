@@ -222,28 +222,52 @@ export type Database = {
       }
       questions: {
         Row: {
+          chapter: string
+          correct_answer: string
+          correct_attempts: number
           correct_index: number
+          difficulty: string
+          explanation: string
           id: string
           options: Json
           order_index: number
-          passage_id: string
+          passage_id: string | null
           question: string
+          subject: string
+          topic: string
+          total_attempts: number
         }
         Insert: {
+          chapter: string
+          correct_answer: string
+          correct_attempts?: number
           correct_index: number
+          difficulty: string
+          explanation: string
           id?: string
           options: Json
           order_index?: number
-          passage_id: string
+          passage_id?: string | null
           question: string
+          subject: string
+          topic: string
+          total_attempts?: number
         }
         Update: {
+          chapter?: string
+          correct_answer?: string
+          correct_attempts?: number
           correct_index?: number
+          difficulty?: string
+          explanation?: string
           id?: string
           options?: Json
           order_index?: number
-          passage_id?: string
+          passage_id?: string | null
           question?: string
+          subject?: string
+          topic?: string
+          total_attempts?: number
         }
         Relationships: [
           {
@@ -291,8 +315,87 @@ export type Database = {
           },
         ]
       }
+      room_participants: {
+        Row: {
+          id: string
+          joined_at: string
+          room_id: string
+          status: Database["public"]["Enums"]["participant_status"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          room_id: string
+          status?: Database["public"]["Enums"]["participant_status"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          room_id?: string
+          status?: Database["public"]["Enums"]["participant_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_participants_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_session_questions: {
+        Row: {
+          created_at: string
+          id: string
+          order_index: number
+          question_id: string
+          room_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_index?: number
+          question_id: string
+          room_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_index?: number
+          question_id?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_session_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_session_questions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
+          chapter: string | null
           code: string
           created_at: string
           duration_seconds: number
@@ -301,8 +404,10 @@ export type Database = {
           passage_id: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["room_status"]
+          subject: string
         }
         Insert: {
+          chapter?: string | null
           code: string
           created_at?: string
           duration_seconds?: number
@@ -311,8 +416,10 @@ export type Database = {
           passage_id?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["room_status"]
+          subject: string
         }
         Update: {
+          chapter?: string | null
           code?: string
           created_at?: string
           duration_seconds?: number
@@ -321,6 +428,7 @@ export type Database = {
           passage_id?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["room_status"]
+          subject?: string
         }
         Relationships: [
           {
@@ -350,6 +458,7 @@ export type Database = {
       }
     }
     Enums: {
+      participant_status: "joined" | "ready" | "completed"
       room_status: "waiting" | "started" | "finished"
     }
     CompositeTypes: {
@@ -478,6 +587,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      participant_status: ["joined", "ready", "completed"],
       room_status: ["waiting", "started", "finished"],
     },
   },
