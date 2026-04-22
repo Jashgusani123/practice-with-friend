@@ -82,7 +82,7 @@ export default function AuthPage() {
           <div className="mb-3 rounded-full bg-primary/10 p-3">
             <GraduationCap className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="font-serif text-2xl text-primary">DDCET MockTest</h1>
+          <h1 className="font-serif text-2xl text-primary">PracticeUps</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Sign in to create or join a test room
           </p>

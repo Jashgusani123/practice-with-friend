@@ -34,16 +34,16 @@ export default function Generate() {
 
       // ✅ INSERT QUESTIONS
       const questions = data.questions.map((q: any, index: number) => ({
-        subject: data.subject.toLowerCase(),
-        chapter: data.chapter.toLowerCase(),
-        difficulty: data.difficulty || "medium",
-        passage_id: passageId,
-        question: q.question,
-        options: q.options,
-        correct_index: q.correct_index,
-        explanation: q.explanation || "",
-        order_index: index,
-      }));
+  subject: data.subject.toLowerCase(),
+  chapter: data.chapter.toLowerCase(),
+  difficulty: data.difficulty || "medium",
+  passage_id: passageId,
+  question: q.question,
+  options: q.options,
+  correct_index: q.correct_index,
+  explanation: q.explanation || "",
+  order_index: index,
+}));
 
       const { error: qErr } = await supabase
         .from("questions")
