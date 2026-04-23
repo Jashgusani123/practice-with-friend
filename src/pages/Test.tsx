@@ -94,35 +94,64 @@ export default function Test() {
     return Math.max(0, Math.floor((end - now) / 1000));
   }, [room, now]);
 
-  const handleSubmit = useCallback(async () => {
-    if (!room || !user || submittedRef.current) return;
+const handleSubmit = useCallback(async () => {
+  if (!room || !user || submittedRef.current) return;
 
-    submittedRef.current = true;
-    setSubmitting(true);
+  submittedRef.current = true;
+  setSubmitting(true);
 
-    try {
-      let score = 0;
+  try {
+    let score = 0;
 
-      questions.forEach((q) => {
-        if (answers[q.id] === q.correct_index) score++;
-      });
+    questions.forEach((q) => {
+      if (answers[q.id] === q.correct_index) score++;
+    });
 
-      await supabase.from("attempts").insert({
+    // ✅ INSERT ATTEMPT + GET ID
+    const { data: attemptData, error: attemptError } = await supabase
+      .from("attempts")
+      .insert({
         room_id: room.id,
         user_id: user.id,
         score,
         total: questions.length,
         submitted_at: new Date().toISOString(),
-      });
+      })
+      .select()
+      .single();
 
-      navigate(`/results/${room.code}`);
-    } catch {
-      submittedRef.current = false;
-      toast.error("Submit failed");
-    } finally {
-      setSubmitting(false);
+    if (attemptError || !attemptData) {
+      throw attemptError;
     }
-  }, [room, user, questions, answers, navigate]);
+
+    const attemptId = attemptData.id; // ✅ IMPORTANT
+
+    // ✅ PREPARE ANSWERS
+    const answersToInsert = questions.map((q) => ({
+      attempt_id: attemptId,
+      question_id: q.id,
+      selected_index: answers[q.id] ?? null,
+      is_correct: answers[q.id] === q.correct_index,
+    }));
+
+    // ✅ INSERT ANSWERS
+    const { error: answersError } = await supabase
+      .from("answers")
+      .insert(answersToInsert);
+
+    if (answersError) {
+      throw answersError;
+    }
+
+    navigate(`/results/${room.code}`);
+  } catch (err) {
+    console.error(err);
+    submittedRef.current = false;
+    toast.error("Submit failed");
+  } finally {
+    setSubmitting(false);
+  }
+}, [room, user, questions, answers, navigate]);
 
   useEffect(() => {
     if (remaining === 0 && questions.length > 0) {
@@ -146,12 +175,12 @@ export default function Test() {
         <span>Room: {room?.code}</span>
         <span className="font-bold text-primary flex gap-2">
           <Clock size={16} />
-          {Math.floor(remaining / 60)}:{(remaining % 60).toString().padStart(2, "0")}
+          {Math.floor(remaining / 60)}:
+          {(remaining % 60).toString().padStart(2, "0")}
         </span>
       </div>
 
       <main className="container py-6 grid lg:grid-cols-2 gap-6">
-
         {passage && (
           <div className="paper p-5">
             <h2 className="font-bold mb-3">{passage.title}</h2>
@@ -170,12 +199,10 @@ export default function Test() {
                 {q.options.map((opt: string, i: number) => (
                   <button
                     key={i}
-                    onClick={() =>
-                      setAnswers({ ...answers, [q.id]: i })
-                    }
+                    onClick={() => setAnswers({ ...answers, [q.id]: i })}
                     className={cn(
                       "p-3 border rounded",
-                      answers[q.id] === i && "bg-primary text-white"
+                      answers[q.id] === i && "bg-primary text-white",
                     )}
                   >
                     {String.fromCharCode(65 + i)}. {opt}

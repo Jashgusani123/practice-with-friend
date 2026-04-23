@@ -233,46 +233,65 @@ export default function Results() {
           )}
         </section>
 
-        {/* Review */}
-        {review.length > 0 && (
-          <section className="mt-8 space-y-4">
-            <h2 className="font-serif text-xl text-primary">Your Answers</h2>
+{/* Review */}
+{review.length > 0 && (
+  <section className="mt-8 space-y-4">
+    <h2 className="font-serif text-xl text-primary">Your Answers</h2>
 
-            {review.map((r, i) => (
-              <div key={i} className="paper p-5">
-                <div className="flex gap-3">
-                  {r.is_correct ? (
-                    <Check className="text-green-500" />
-                  ) : (
-                    <X className="text-red-500" />
-                  )}
+    {review.map((r, i) => (
+      <div key={i} className="paper p-5">
+        <div className="flex items-start gap-3">
 
-                  <div>
-                    <p className="font-medium">
-                      Q{i + 1}. {r.question}
-                    </p>
+          {/* ICON */}
+          {r.is_correct ? (
+            <Check className="mt-0.5 h-5 w-5 text-green-500" />
+          ) : (
+            <X className="mt-0.5 h-5 w-5 text-red-500" />
+          )}
 
-                    {r.options.map((opt, idx) => (
-                      <div
-                        key={idx}
-                        className={`text-sm ${
-                          idx === r.correct_index
-                            ? "text-green-600"
-                            : idx === r.selected_index
-                            ? "text-red-500"
-                            : ""
-                        }`}
-                      >
-                        {String.fromCharCode(65 + idx)}. {opt}
-                      </div>
-                    ))}
+          <div className="flex-1">
+
+            {/* QUESTION */}
+            <p className="font-medium text-primary">
+              Q{i + 1}. {r.question}
+            </p>
+
+            {/* OPTIONS */}
+            <div className="mt-3 space-y-1 text-sm">
+
+              {r.options.map((opt, idx) => {
+                const isCorrect = idx === r.correct_index;
+                const isPicked = idx === r.selected_index;
+
+                return (
+                  <div
+                    key={idx}
+                    className={`px-3 py-1.5 rounded border ${
+                      isCorrect
+                        ? "bg-green-100 border-green-400 text-green-700"
+                        : isPicked
+                        ? "bg-red-100 border-red-400 text-red-700"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    <span className="font-semibold">
+                      {String.fromCharCode(65 + idx)}.
+                    </span>{" "}
+                    {opt}
+
+                    {isCorrect && " ( ✓ Correct )"}
+                    {isPicked && !isCorrect && " ( ✗ Your Answer )"}
                   </div>
-                </div>
-              </div>
-            ))}
-          </section>
-        )}
+                );
+              })}
+            </div>
 
+          </div>
+        </div>
+      </div>
+    ))}
+  </section>
+)}
         <div className="mt-10 text-center">
           <Button asChild size="lg">
             <Link to="/">Back to Home</Link>
