@@ -9,37 +9,18 @@ export function generateRoomCode(): string {
   return code;
 }
 
-
-
 export async function createRoom(
   hostId: string,
   subject: string,
-  chapter: string | null,
+  chapter: string | null = null,
   durationSeconds = 1800
 ) {
   const code = generateRoomCode();
 
-  // =========================
-  // 1. FETCH ALL QUESTIONS
-  // =========================
-  let query = supabase
-    .from("questions")
-    .select("id, passage_id")
-    .eq("subject", subject.toLowerCase());
-
-  if (chapter && chapter !== "ALL") {
-    query = query.eq("chapter", chapter.toLowerCase());
-  }
-
-  const { data: allQuestions, error: qErr } = await query;
-
-  if (qErr) throw qErr;
-  if (!allQuestions || allQuestions.length === 0) {
-    throw new Error("No questions available for this selection");
-  }
+  const normalizedSubject = subject.toLowerCase();
 
   // =========================
-  // 2. REMOVE ALREADY ATTEMPTED (🔥 HISTORY)
+  // 1. GET USER HISTORY
   // =========================
   const { data: history } = await supabase
     .from("user_question_history")
@@ -48,43 +29,93 @@ export async function createRoom(
 
   const usedIds = history?.map((h) => h.question_id) || [];
 
-  const availableQuestions = allQuestions.filter(
-    (q) => !usedIds.includes(q.id)
-  );
-
-  if (availableQuestions.length === 0) {
-    throw new Error("No new questions available (all attempted)");
-  }
-
   // =========================
-  // 3. RANDOMIZE & PICK 15
+  // 2. ENGLISH LOGIC (FIXED)
   // =========================
-  const shuffled = [...availableQuestions].sort(() => Math.random() - 0.5);
-
-  const selectedQuestions = shuffled.slice(0, 10);
-
-  // =========================
-  // 4. DETECT PASSAGE (ENGLISH ONLY)
-  // =========================
+  let selectedQuestions: any[] = [];
   let passageId: string | null = null;
 
-  if (subject.toLowerCase() === "english") {
-    const withPassage = selectedQuestions.find((q) => q.passage_id);
-    if (withPassage) {
-      passageId = withPassage.passage_id;
+  if (normalizedSubject === "english") {
+    // 👉 get all passages
+    const { data: passages } = await supabase
+      .from("passages")
+      .select("id");
+
+    if (!passages || passages.length === 0) {
+      throw new Error("No passages available");
+    }
+
+    // 🔀 shuffle passages
+    const shuffledPassages = [...passages].sort(
+      () => Math.random() - 0.5
+    );
+
+    // 👉 find passage with UNUSED questions
+    for (const p of shuffledPassages) {
+      const { data: qs } = await supabase
+        .from("questions")
+        .select("id, passage_id")
+        .eq("passage_id", p.id);
+
+      const filtered = (qs || []).filter(
+        (q) => !usedIds.includes(q.id)
+      );
+
+      if (filtered.length >= 10) {
+        selectedQuestions = filtered
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 10);
+
+        passageId = p.id;
+        break;
+      }
+    }
+
+    if (selectedQuestions.length === 0) {
+      throw new Error("No new English questions available");
     }
   }
 
   // =========================
-  // 5. CREATE ROOM
+  // 3. OTHER SUBJECTS
+  // =========================
+  else {
+    let query = supabase
+      .from("questions")
+      .select("id, passage_id")
+      .eq("subject", normalizedSubject);
+
+    if (chapter && chapter !== "ALL") {
+      query = query.eq("chapter", chapter.toLowerCase());
+    }
+
+    const { data: allQuestions, error } = await query;
+
+    if (error) throw error;
+
+    const available = (allQuestions || []).filter(
+      (q) => !usedIds.includes(q.id)
+    );
+
+    if (available.length === 0) {
+      throw new Error("No new questions available");
+    }
+
+    selectedQuestions = available
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 10);
+  }
+
+  // =========================
+  // 4. CREATE ROOM
   // =========================
   const { data: newRoom, error: roomErr } = await supabase
     .from("rooms")
     .insert({
       code,
       host_id: hostId,
-      subject: subject.toLowerCase(),
-      chapter: chapter === "ALL" ? null : chapter?.toLowerCase() || null,
+      subject: normalizedSubject,
+      chapter: chapter === "ALL" ? null : chapter,
       passage_id: passageId,
       duration_seconds: durationSeconds,
       status: "waiting",
@@ -95,7 +126,7 @@ export async function createRoom(
   if (roomErr) throw roomErr;
 
   // =========================
-  // 6. SAVE ROOM QUESTIONS
+  // 5. SAVE ROOM QUESTIONS
   // =========================
   const roomQuestions = selectedQuestions.map((q, index) => ({
     room_id: newRoom.id,
@@ -110,7 +141,7 @@ export async function createRoom(
   if (rqErr) throw rqErr;
 
   // =========================
-  // 7. ADD HOST AS PARTICIPANT
+  // 6. ADD HOST
   // =========================
   await supabase.from("room_participants").insert({
     room_id: newRoom.id,

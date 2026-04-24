@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { joinRoom } from "@/lib/room";
-import {createRoom} from "@/lib/room";
+import { createRoom } from "@/lib/room";
 
 import { toast } from "sonner";
 import { Users, PlusCircle, LogIn, Sparkles } from "lucide-react";
@@ -27,7 +27,7 @@ const Index = () => {
       setLoading("create");
 
       // ✅ pass subject here
-      const room = await createRoom(user.id, subject);
+      const room = await createRoom(user.id, subject, null);
 
       navigate(`/lobby/${room.code}`);
     } catch (e: any) {
@@ -75,8 +75,8 @@ const Index = () => {
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Create a private room, share the code, and race through a passage-based
-            test together. Live leaderboard included.
+            Create a private room, share the code, and race through a
+            passage-based test together. Live leaderboard included.
           </p>
         </section>
 
@@ -87,26 +87,31 @@ const Index = () => {
               <PlusCircle className="h-6 w-6 text-primary" />
             </div>
 
-            <h2 className="font-serif text-2xl text-primary">
-              Create a Room
-            </h2>
+            <h2 className="font-serif text-2xl text-primary">Create a Room</h2>
 
             <p className="mt-2 text-sm text-muted-foreground">
-              You'll be the host. A unique code will be generated for friends to join.
+              You'll be the host. A unique code will be generated for friends to
+              join.
             </p>
 
             {/* ✅ SUBJECT SELECT */}
             <div className="mt-4 space-y-2 text-left">
-              <Label>Select Subject</Label>
-              <select
-  value={subject}
-  onChange={(e) => setSubject(e.target.value)}
->
-  <option value="English">English</option>
-  <option value="Mathematics">Mathematics</option>
-  <option value="Physics">Physics</option>
-  <option value="Chemistry">Chemistry</option>
-</select>
+              <div className="mt-4 space-y-2 text-left">
+                <Label>Select Subject</Label>
+
+                <select
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  className="w-full border rounded p-2"
+                >
+                  <option value="english">English</option>
+                  <option value="mathematics">Mathematics</option>
+                  <option value="physics">Physics</option>
+                  <option value="chemistry">Chemistry</option>
+                  <option value="computer">Computer</option>
+                  <option value="environment">Environment</option>
+                </select>
+              </div>
             </div>
 
             <Button
@@ -125,9 +130,7 @@ const Index = () => {
               <LogIn className="h-6 w-6 text-foreground" />
             </div>
 
-            <h2 className="font-serif text-2xl text-primary">
-              Join a Room
-            </h2>
+            <h2 className="font-serif text-2xl text-primary">Join a Room</h2>
 
             <p className="mt-2 text-sm text-muted-foreground">
               Enter the 6-character code your host shared with you.

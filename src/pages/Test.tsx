@@ -23,15 +23,16 @@ export default function Test() {
 
   const submittedRef = useRef(false);
 
+  // =========================
+  // 🔥 LOAD ROOM + QUESTIONS
+  // =========================
   useEffect(() => {
     if (!code || !user) return;
 
     const load = async () => {
       setLoading(true);
 
-      // =====================
-      // ROOM
-      // =====================
+      // ✅ ROOM
       const { data: r } = await supabase
         .from("rooms")
         .select("*")
@@ -46,9 +47,9 @@ export default function Test() {
 
       setRoom(r);
 
-      // =====================
-      // PASSAGE (FIXED)
-      // =====================
+      // =========================
+      // ✅ PASSAGE (ENGLISH)
+      // =========================
       if (r.passage_id) {
         const { data: p } = await supabase
           .from("passages")
@@ -59,21 +60,29 @@ export default function Test() {
         setPassage(p);
       }
 
-      // =====================
-      // QUESTIONS (SIMPLE)
-      // =====================
-      const { data: qs } = await supabase
-        .from("questions")
-        .select("*")
-        .eq("subject", r.subject.toLowerCase());
+      // =========================
+      // ✅ QUESTIONS FROM room_questions
+      // =========================
+      const { data: rq, error } = await supabase
+        .from("room_questions")
+        .select(`
+          order_index,
+          questions (*)
+        `)
+        .eq("room_id", r.id)
+        .order("order_index");
 
-      if (!qs || qs.length === 0) {
-        toast.error("No questions found");
+      if (error || !rq) {
+        toast.error("Failed to load questions");
         return;
       }
 
-      const shuffled = [...qs].sort(() => Math.random() - 0.5);
-      setQuestions(shuffled.slice(0, 10));
+      const finalQuestions = rq.map((item: any) => ({
+        ...item.questions,
+        options: item.questions.options || [],
+      }));
+
+      setQuestions(finalQuestions);
 
       setLoading(false);
     };
@@ -81,7 +90,9 @@ export default function Test() {
     load();
   }, [code, user, navigate]);
 
-  // TIMER
+  // =========================
+  // ⏱ TIMER
+  // =========================
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -94,71 +105,93 @@ export default function Test() {
     return Math.max(0, Math.floor((end - now) / 1000));
   }, [room, now]);
 
-const handleSubmit = useCallback(async () => {
-  if (!room || !user || submittedRef.current) return;
+  // =========================
+  // 💾 SAVE ANSWERS (LOCAL STORAGE)
+  // =========================
+  useEffect(() => {
+    const saved = localStorage.getItem(`answers-${code}`);
+    if (saved) setAnswers(JSON.parse(saved));
+  }, [code]);
 
-  submittedRef.current = true;
-  setSubmitting(true);
+  useEffect(() => {
+    localStorage.setItem(`answers-${code}`, JSON.stringify(answers));
+  }, [answers, code]);
 
-  try {
-    let score = 0;
+  // =========================
+  // 📤 SUBMIT
+  // =========================
+  const handleSubmit = useCallback(async () => {
+    if (!room || !user || submittedRef.current) return;
 
-    questions.forEach((q) => {
-      if (answers[q.id] === q.correct_index) score++;
-    });
+    submittedRef.current = true;
+    setSubmitting(true);
 
-    // ✅ INSERT ATTEMPT + GET ID
-    const { data: attemptData, error: attemptError } = await supabase
-      .from("attempts")
-      .insert({
-        room_id: room.id,
-        user_id: user.id,
-        score,
-        total: questions.length,
-        submitted_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+    try {
+      let score = 0;
 
-    if (attemptError || !attemptData) {
-      throw attemptError;
+      questions.forEach((q) => {
+        if (answers[q.id] === q.correct_index) score++;
+      });
+
+      // ✅ INSERT ATTEMPT
+      const { data: attemptData, error: attemptError } = await supabase
+        .from("attempts")
+        .insert({
+          room_id: room.id,
+          user_id: user.id,
+          score,
+          total: questions.length,
+          submitted_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (attemptError || !attemptData) throw attemptError;
+
+      const attemptId = attemptData.id;
+
+      // ✅ INSERT ANSWERS
+      const answersToInsert = questions.map((q) => ({
+        attempt_id: attemptId,
+        question_id: q.id,
+        selected_index: answers[q.id] ?? null,
+        is_correct: answers[q.id] === q.correct_index,
+      }));
+
+      await supabase.from("answers").insert(answersToInsert);
+
+      // ✅ SAVE HISTORY
+      await supabase.from("user_question_history").insert(
+        questions.map((q) => ({
+          user_id: user.id,
+          question_id: q.id,
+        }))
+      );
+
+      localStorage.removeItem(`answers-${code}`);
+
+      navigate(`/results/${room.code}`);
+    } catch (err) {
+      console.error(err);
+      submittedRef.current = false;
+      toast.error("Submit failed");
+    } finally {
+      setSubmitting(false);
     }
+  }, [room, user, questions, answers, navigate, code]);
 
-    const attemptId = attemptData.id; // ✅ IMPORTANT
-
-    // ✅ PREPARE ANSWERS
-    const answersToInsert = questions.map((q) => ({
-      attempt_id: attemptId,
-      question_id: q.id,
-      selected_index: answers[q.id] ?? null,
-      is_correct: answers[q.id] === q.correct_index,
-    }));
-
-    // ✅ INSERT ANSWERS
-    const { error: answersError } = await supabase
-      .from("answers")
-      .insert(answersToInsert);
-
-    if (answersError) {
-      throw answersError;
-    }
-
-    navigate(`/results/${room.code}`);
-  } catch (err) {
-    console.error(err);
-    submittedRef.current = false;
-    toast.error("Submit failed");
-  } finally {
-    setSubmitting(false);
-  }
-}, [room, user, questions, answers, navigate]);
-
+  // =========================
+  // ⏰ AUTO SUBMIT
+  // =========================
   useEffect(() => {
     if (remaining === 0 && questions.length > 0) {
       handleSubmit();
     }
   }, [remaining, questions, handleSubmit]);
 
+  // =========================
+  // LOADING
+  // =========================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -167,10 +200,14 @@ const handleSubmit = useCallback(async () => {
     );
   }
 
+  // =========================
+  // UI
+  // =========================
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
+      {/* TIMER */}
       <div className="sticky top-0 z-10 bg-card border-b flex justify-between p-3">
         <span>Room: {room?.code}</span>
         <span className="font-bold text-primary flex gap-2">
@@ -180,7 +217,10 @@ const handleSubmit = useCallback(async () => {
         </span>
       </div>
 
-      <main className="container py-6 grid lg:grid-cols-2 gap-6">
+      {/* ✅ FULL WIDTH QUESTIONS */}
+      <main className="container py-6 max-w-4xl mx-auto space-y-6">
+
+        {/* PASSAGE */}
         {passage && (
           <div className="paper p-5">
             <h2 className="font-bold mb-3">{passage.title}</h2>
@@ -188,34 +228,35 @@ const handleSubmit = useCallback(async () => {
           </div>
         )}
 
-        <div className="space-y-4">
-          {questions.map((q, idx) => (
-            <div key={q.id} className="paper p-4">
-              <p className="font-semibold mb-3">
-                Q{idx + 1}. {q.question}
-              </p>
+        {/* QUESTIONS */}
+        {questions.map((q, idx) => (
+          <div key={q.id} className="paper p-4">
+            <p className="font-semibold mb-3">
+              Q{idx + 1}. {q.question}
+            </p>
 
-              <div className="grid grid-cols-2 gap-2">
-                {q.options.map((opt: string, i: number) => (
-                  <button
-                    key={i}
-                    onClick={() => setAnswers({ ...answers, [q.id]: i })}
-                    className={cn(
-                      "p-3 border rounded",
-                      answers[q.id] === i && "bg-primary text-white",
-                    )}
-                  >
-                    {String.fromCharCode(65 + i)}. {opt}
-                  </button>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 gap-2">
+              {q.options.map((opt: string, i: number) => (
+                <button
+                  key={i}
+                  onClick={() =>
+                    setAnswers((prev) => ({ ...prev, [q.id]: i }))
+                  }
+                  className={cn(
+                    "p-3 border rounded text-left",
+                    answers[q.id] === i && "bg-primary text-white"
+                  )}
+                >
+                  {String.fromCharCode(65 + i)}. {opt}
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
+        ))}
 
-          <Button onClick={handleSubmit} disabled={submitting}>
-            Submit
-          </Button>
-        </div>
+        <Button onClick={handleSubmit} disabled={submitting}>
+          {submitting ? "Submitting..." : "Submit"}
+        </Button>
       </main>
     </div>
   );

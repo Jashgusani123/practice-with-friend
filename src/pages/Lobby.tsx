@@ -52,7 +52,7 @@ export default function Lobby() {
 
       setRoom(data as Room);
 
-      if (data.status === "started") {
+      if (data.status === "started" && user) {
         navigate(`/test/${data.code}`);
       }
     };
@@ -67,12 +67,14 @@ export default function Lobby() {
     const loadMembers = async () => {
       const { data: rows } = await supabase
         .from("room_participants")
-        .select(`
+        .select(
+          `
           user_id,
           joined_at,
           status,
           profiles!room_participants_user_id_profiles_fkey(display_name)
-        `)
+        `,
+        )
         .eq("room_id", room.id)
         .order("joined_at", { ascending: true });
 
@@ -83,7 +85,7 @@ export default function Lobby() {
             joined_at: m.joined_at,
             display_name: m.profiles?.display_name ?? "Player",
             completed: m.status === "completed",
-          }))
+          })),
         );
       }
     };
@@ -100,7 +102,7 @@ export default function Lobby() {
           table: "room_participants",
           filter: `room_id=eq.${room.id}`,
         },
-        () => loadMembers()
+        () => loadMembers(),
       )
       .on(
         "postgres_changes",
@@ -114,10 +116,10 @@ export default function Lobby() {
           const updated = payload.new as Room;
           setRoom(updated);
 
-          if (updated.status === "started") {
+          if (updated.status === "started" && user) {
             navigate(`/test/${updated.code}`);
           }
-        }
+        },
       )
       .subscribe();
 
@@ -139,7 +141,11 @@ export default function Lobby() {
 
     try {
       setStarting(true);
+
       await startRoom(room.id);
+
+      // ✅ FORCE NAVIGATION (IMPORTANT FIX)
+      navigate(`/test/${room.code}`);
     } catch (e: any) {
       toast.error(e.message ?? "Failed to start");
     } finally {
@@ -188,9 +194,7 @@ export default function Lobby() {
         <div className="mt-6 paper p-6">
           <div className="mb-4 flex items-center gap-2 text-primary">
             <Users className="h-5 w-5" />
-            <h2 className="font-serif text-xl">
-              Players ({members.length})
-            </h2>
+            <h2 className="font-serif text-xl">Players ({members.length})</h2>
           </div>
 
           <ul className="divide-y">
@@ -213,9 +217,7 @@ export default function Lobby() {
                   )}
 
                   {m.user_id === user?.id && (
-                    <span className="text-xs text-muted-foreground">
-                      (you)
-                    </span>
+                    <span className="text-xs text-muted-foreground">(you)</span>
                   )}
                 </div>
 
@@ -224,20 +226,20 @@ export default function Lobby() {
                     m.completed
                       ? "bg-success/15 text-success"
                       : room.status === "started"
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {m.completed
                     ? "Completed"
                     : room.status === "started"
-                    ? "In test"
-                    : "Joined"}
+                      ? "In test"
+                      : "Joined"}
                 </span>
               </li>
             ))}
           </ul>
-        </div>  
+        </div>
 
         {/* Start Button */}
         <div className="mt-6 text-center">
