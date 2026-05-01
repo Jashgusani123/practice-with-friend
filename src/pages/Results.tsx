@@ -21,7 +21,11 @@ interface AnswerReview {
   selected_index: number;
   is_correct: boolean;
   order_index: number;
+  marks: number;
 }
+
+const POSITIVE_MARK = 2;
+const NEGATIVE_MARK = -0.5;
 
 export default function Results() {
   const { code } = useParams<{ code: string }>();
@@ -32,16 +36,18 @@ export default function Results() {
   const [leaderboard, setLeaderboard] = useState<Row[]>([]);
   const [review, setReview] = useState<AnswerReview[]>([]);
   const [loading, setLoading] = useState(true);
-  const [myScore, setMyScore] = useState<{ score: number; total: number } | null>(null);
+  const [myScore, setMyScore] = useState<number>(0);
 
-  // ✅ LOAD DATA
+  // =========================
+  // LOAD DATA
+  // =========================
   useEffect(() => {
     if (!code || !user) return;
 
     const load = async () => {
       setLoading(true);
 
-      // Room
+      // ROOM
       const { data: room } = await supabase
         .from("rooms")
         .select("id")
@@ -55,7 +61,7 @@ export default function Results() {
 
       setRoomId(room.id);
 
-      // ✅ Leaderboard (FIXED)
+      // LEADERBOARD
       const { data: attempts } = await supabase
         .from("attempts")
         .select(`
@@ -66,8 +72,7 @@ export default function Results() {
           profiles!attempts_user_id_profiles_fkey(display_name)
         `)
         .eq("room_id", room.id)
-        .order("score", { ascending: false })
-        .order("submitted_at", { ascending: true });
+        .order("score", { ascending: false });
 
       const rows: Row[] = (attempts ?? []).map((a: any) => ({
         user_id: a.user_id,
@@ -80,9 +85,9 @@ export default function Results() {
       setLeaderboard(rows);
 
       const mine = rows.find((r) => r.user_id === user.id);
-      if (mine) setMyScore({ score: mine.score, total: mine.total });
+      if (mine) setMyScore(mine.score);
 
-      // ✅ My Answers Review
+      // MY ATTEMPT
       const { data: myAttempt } = await supabase
         .from("attempts")
         .select("id")
@@ -108,10 +113,18 @@ export default function Results() {
             selected_index: a.selected_index,
             is_correct: a.is_correct,
             order_index: a.questions?.order_index ?? 0,
+            marks: a.is_correct ? POSITIVE_MARK : NEGATIVE_MARK,
           }))
           .sort((a, b) => a.order_index - b.order_index);
 
         setReview(reviewRows);
+
+        // FINAL SCORE CALCULATION
+        const totalScore = reviewRows.reduce((acc, r) => {
+          return acc + r.marks;
+        }, 0);
+
+        setMyScore(totalScore);
       }
 
       setLoading(false);
@@ -120,7 +133,9 @@ export default function Results() {
     load();
   }, [code, user, navigate]);
 
-  // ✅ REALTIME UPDATE
+  // =========================
+  // REALTIME LEADERBOARD
+  // =========================
   useEffect(() => {
     if (!roomId) return;
 
@@ -145,8 +160,7 @@ export default function Results() {
               profiles!attempts_user_id_profiles_fkey(display_name)
             `)
             .eq("room_id", roomId)
-            .order("score", { ascending: false })
-            .order("submitted_at", { ascending: true });
+            .order("score", { ascending: false });
 
           if (attempts) {
             setLeaderboard(
@@ -168,135 +182,148 @@ export default function Results() {
     };
   }, [roomId]);
 
-  // ✅ LOADING UI
+  // =========================
+  // LOADING UI
+  // =========================
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <div className="container flex items-center justify-center py-20 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading results…
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Loading results…
         </div>
       </div>
     );
   }
 
+  // =========================
+  // UI
+  // =========================
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <main className="container max-w-4xl py-10">
-        {/* Score */}
-        {myScore && (
-          <div className="paper-elevated p-8 text-center">
-            <Trophy className="mx-auto h-10 w-10 text-accent" />
-            <h1 className="mt-3 font-serif text-3xl text-primary">
-              You scored {myScore.score} / {myScore.total}
-            </h1>
-          </div>
-        )}
 
-        {/* Leaderboard */}
+        {/* SCORE */}
+        <div className="paper-elevated p-8 text-center">
+          <Trophy className="mx-auto h-10 w-10 text-accent" />
+
+          <h1 className="mt-3 font-serif text-3xl text-primary">
+            Your Score: {myScore}
+          </h1>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            +{POSITIVE_MARK} correct | {NEGATIVE_MARK} wrong
+          </p>
+        </div>
+
+        {/* LEADERBOARD */}
         <section className="mt-8 paper p-6">
-          <h2 className="mb-4 font-serif text-xl text-primary">Leaderboard</h2>
+          <h2 className="mb-4 font-serif text-xl text-primary">
+            Leaderboard
+          </h2>
 
-          {leaderboard.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No one has submitted yet...
-            </p>
-          ) : (
-            <ul className="divide-y">
-              {leaderboard.map((r, i) => (
-                <li
-                  key={r.user_id}
-                  className={`flex items-center justify-between py-3 ${
-                    r.user_id === user?.id ? "font-semibold" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-bold">
-                      {i + 1}
-                    </span>
-
-                    <span>{r.display_name}</span>
-
-                    {r.user_id === user?.id && (
-                      <span className="text-xs text-muted-foreground">(you)</span>
-                    )}
-                  </div>
-
-                  <span className="text-primary">
-                    {r.score} / {r.total}
+          <ul className="divide-y">
+            {leaderboard.map((r, i) => (
+              <li
+                key={r.user_id}
+                className={`flex justify-between py-3 ${
+                  r.user_id === user?.id ? "font-semibold" : ""
+                }`}
+              >
+                <div className="flex gap-3">
+                  <span className="h-6 w-6 rounded-full bg-muted text-center text-xs font-bold">
+                    {i + 1}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
+                  <span>{r.display_name}</span>
+                </div>
+                <span className="text-primary">
+                  {r.score}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
 
-{/* Review */}
-{review.length > 0 && (
-  <section className="mt-8 space-y-4">
-    <h2 className="font-serif text-xl text-primary">Your Answers</h2>
+        {/* REVIEW */}
+        {review.length > 0 && (
+          <section className="mt-8 space-y-4">
+            <h2 className="font-serif text-xl text-primary">
+              Answer Review
+            </h2>
 
-    {review.map((r, i) => (
-      <div key={i} className="paper p-5">
-        <div className="flex items-start gap-3">
+            {review.map((r, i) => (
+              <div key={i} className="paper p-5">
 
-          {/* ICON */}
-          {r.is_correct ? (
-            <Check className="mt-0.5 h-5 w-5 text-green-500" />
-          ) : (
-            <X className="mt-0.5 h-5 w-5 text-red-500" />
-          )}
+                <div className="flex items-start gap-3">
 
-          <div className="flex-1">
+                  {r.is_correct ? (
+                    <Check className="mt-0.5 h-5 w-5 text-green-500" />
+                  ) : (
+                    <X className="mt-0.5 h-5 w-5 text-red-500" />
+                  )}
 
-            {/* QUESTION */}
-            <p className="font-medium text-primary">
-              Q{i + 1}. {r.question}
-            </p>
+                  <div className="flex-1">
 
-            {/* OPTIONS */}
-            <div className="mt-3 space-y-1 text-sm">
+                    {/* MARKS */}
+                    <div className="mb-2 font-semibold">
+                      Marks:{" "}
+                      <span className={r.is_correct ? "text-green-600" : "text-red-600"}>
+                        {r.marks}
+                      </span>
+                    </div>
 
-              {r.options.map((opt, idx) => {
-                const isCorrect = idx === r.correct_index;
-                const isPicked = idx === r.selected_index;
+                    {/* QUESTION */}
+                    <p className="font-medium text-primary">
+                      Q{i + 1}. {r.question}
+                    </p>
 
-                return (
-                  <div
-                    key={idx}
-                    className={`px-3 py-1.5 rounded border ${
-                      isCorrect
-                        ? "bg-green-100 border-green-400 text-green-700"
-                        : isPicked
-                        ? "bg-red-100 border-red-400 text-red-700"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    <span className="font-semibold">
-                      {String.fromCharCode(65 + idx)}.
-                    </span>{" "}
-                    {opt}
+                    {/* OPTIONS */}
+                    <div className="mt-3 space-y-1 text-sm">
+                      {r.options.map((opt, idx) => {
+                        const isCorrect = idx === r.correct_index;
+                        const isPicked = idx === r.selected_index;
 
-                    {isCorrect && " ( ✓ Correct )"}
-                    {isPicked && !isCorrect && " ( ✗ Your Answer )"}
+                        return (
+                          <div
+                            key={idx}
+                            className={`px-3 py-1.5 rounded border ${
+                              isCorrect
+                                ? "bg-green-100 border-green-400 text-green-700"
+                                : isPicked
+                                ? "bg-red-100 border-red-400 text-red-700"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            <span className="font-semibold">
+                              {String.fromCharCode(65 + idx)}.
+                            </span>{" "}
+                            {opt}
+
+                            {isCorrect && " (✓ Correct)"}
+                            {isPicked && !isCorrect && " (✗ Your Answer)"}
+                          </div>
+                        );
+                      })}
+                    </div>
+
                   </div>
-                );
-              })}
-            </div>
+                </div>
 
-          </div>
-        </div>
-      </div>
-    ))}
-  </section>
-)}
+              </div>
+            ))}
+          </section>
+        )}
+
+        {/* BACK HOME */}
         <div className="mt-10 text-center">
           <Button asChild size="lg">
             <Link to="/">Back to Home</Link>
           </Button>
         </div>
+
       </main>
     </div>
   );

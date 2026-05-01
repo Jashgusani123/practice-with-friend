@@ -110,6 +110,7 @@ const Index = () => {
                   <option value="chemistry">Chemistry</option>
                   <option value="computer">Computer</option>
                   <option value="environment">Environment</option>
+                  <option value="mock">Mock Test</option>
                 </select>
               </div>
             </div>

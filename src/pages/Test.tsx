@@ -24,7 +24,7 @@ export default function Test() {
   const submittedRef = useRef(false);
 
   // =========================
-  // 🔥 LOAD ROOM + QUESTIONS
+  // LOAD ROOM + QUESTIONS
   // =========================
   useEffect(() => {
     if (!code || !user) return;
@@ -32,7 +32,6 @@ export default function Test() {
     const load = async () => {
       setLoading(true);
 
-      // ✅ ROOM
       const { data: r } = await supabase
         .from("rooms")
         .select("*")
@@ -47,9 +46,6 @@ export default function Test() {
 
       setRoom(r);
 
-      // =========================
-      // ✅ PASSAGE (ENGLISH)
-      // =========================
       if (r.passage_id) {
         const { data: p } = await supabase
           .from("passages")
@@ -61,8 +57,10 @@ export default function Test() {
       }
 
       // =========================
-      // ✅ QUESTIONS FROM room_questions
+      // LIMIT LOGIC (IMPORTANT)
       // =========================
+      const limit = r.subject === "mock" ? 100 : 10;
+
       const { data: rq, error } = await supabase
         .from("room_questions")
         .select(`
@@ -70,7 +68,8 @@ export default function Test() {
           questions (*)
         `)
         .eq("room_id", r.id)
-        .order("order_index");
+        .order("order_index")
+        .limit(limit);
 
       if (error || !rq) {
         toast.error("Failed to load questions");
@@ -83,7 +82,6 @@ export default function Test() {
       }));
 
       setQuestions(finalQuestions);
-
       setLoading(false);
     };
 
@@ -91,7 +89,7 @@ export default function Test() {
   }, [code, user, navigate]);
 
   // =========================
-  // ⏱ TIMER
+  // TIMER
   // =========================
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -106,7 +104,7 @@ export default function Test() {
   }, [room, now]);
 
   // =========================
-  // 💾 SAVE ANSWERS (LOCAL STORAGE)
+  // SAVE ANSWERS (LOCAL STORAGE)
   // =========================
   useEffect(() => {
     const saved = localStorage.getItem(`answers-${code}`);
@@ -118,7 +116,7 @@ export default function Test() {
   }, [answers, code]);
 
   // =========================
-  // 📤 SUBMIT
+  // SUBMIT
   // =========================
   const handleSubmit = useCallback(async () => {
     if (!room || !user || submittedRef.current) return;
@@ -133,7 +131,6 @@ export default function Test() {
         if (answers[q.id] === q.correct_index) score++;
       });
 
-      // ✅ INSERT ATTEMPT
       const { data: attemptData, error: attemptError } = await supabase
         .from("attempts")
         .insert({
@@ -150,7 +147,6 @@ export default function Test() {
 
       const attemptId = attemptData.id;
 
-      // ✅ INSERT ANSWERS
       const answersToInsert = questions.map((q) => ({
         attempt_id: attemptId,
         question_id: q.id,
@@ -160,7 +156,6 @@ export default function Test() {
 
       await supabase.from("answers").insert(answersToInsert);
 
-      // ✅ SAVE HISTORY
       await supabase.from("user_question_history").insert(
         questions.map((q) => ({
           user_id: user.id,
@@ -181,7 +176,7 @@ export default function Test() {
   }, [room, user, questions, answers, navigate, code]);
 
   // =========================
-  // ⏰ AUTO SUBMIT
+  // AUTO SUBMIT
   // =========================
   useEffect(() => {
     if (remaining === 0 && questions.length > 0) {
@@ -217,7 +212,6 @@ export default function Test() {
         </span>
       </div>
 
-      {/* ✅ FULL WIDTH QUESTIONS */}
       <main className="container py-6 max-w-4xl mx-auto space-y-6">
 
         {/* PASSAGE */}
@@ -228,7 +222,7 @@ export default function Test() {
           </div>
         )}
 
-        {/* QUESTIONS */}
+        {/* QUESTIONS (LIMITED) */}
         {questions.map((q, idx) => (
           <div key={q.id} className="paper p-4">
             <p className="font-semibold mb-3">
