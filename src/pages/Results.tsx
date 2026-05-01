@@ -12,6 +12,9 @@ interface Row {
   score: number;
   total: number;
   submitted_at: string | null;
+   correct?: number;
+  wrong?: number;
+  not_attempted?: number;
 }
 
 interface AnswerReview {
@@ -39,217 +42,213 @@ export default function Results() {
   const [loading, setLoading] = useState(true);
   const [myScore, setMyScore] = useState<number>(0);
 
-  // =========================
-  // LOAD DATA
-  // =========================
-  useEffect(() => {
-    if (!code || !user) return;
+useEffect(() => {
+  if (!code || !user) return;
 
-    const load = async () => {
-      setLoading(true);
+  const load = async () => {
+    setLoading(true);
 
-      const { data: room } = await supabase
-        .from("rooms")
-        .select("id")
-        .eq("code", code.toUpperCase())
-        .maybeSingle();
+    // =========================
+    // ROOM
+    // =========================
+    const { data: room } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("code", code.toUpperCase())
+      .maybeSingle();
 
-      if (!room) {
-        navigate("/");
-        return;
-      }
+    if (!room) {
+      navigate("/");
+      return;
+    }
 
-      setRoomId(room.id);
+    setRoomId(room.id);
 
-      // =========================
-      // LEADERBOARD
-      // =========================
-      const { data: attempts } = await supabase
-        .from("attempts")
-        .select(`
-          user_id,
-          score,
-          total,
-          submitted_at,
-          profiles!attempts_user_id_profiles_fkey(display_name)
-        `)
-        .eq("room_id", room.id)
-        .order("score", { ascending: false });
+    // =========================
+    // LEADERBOARD
+    // =========================
+    const { data: attempts } = await supabase
+      .from("attempts")
+      .select(`
+        id,
+        user_id,
+        score,
+        total,
+        submitted_at,
+        profiles!attempts_user_id_profiles_fkey(display_name)
+      `)
+      .eq("room_id", room.id)
+      .order("score", { ascending: false });
 
-      const rows: Row[] = (attempts ?? []).map((a: any) => ({
+    // =========================
+    // GET ALL ANSWERS (IMPORTANT FIX)
+    // =========================
+    const { data: allAnswers } = await supabase
+      .from("answers")
+      .select(`
+        attempt_id,
+        selected_index,
+        question:questions (
+          correct_index
+        )
+      `);
+
+    const rows: Row[] = (attempts ?? []).map((a: any) => {
+      const answers = (allAnswers ?? []).filter(
+        (x: any) => x.attempt_id === a.id
+      );
+
+      let correct = 0;
+      let wrong = 0;
+      let not_attempted = 0;
+
+      answers.forEach((ans: any) => {
+        const selected = ans.selected_index;
+        const correctIndex = ans.question?.correct_index;
+
+        if (selected === null || selected === -1) {
+          not_attempted++;
+        } else if (selected === correctIndex) {
+          correct++;
+        } else {
+          wrong++;
+        }
+      });
+
+      return {
         user_id: a.user_id,
         display_name: a.profiles?.display_name ?? "Player",
         score: a.score ?? 0,
         total: a.total ?? 0,
         submitted_at: a.submitted_at ?? null,
-      }));
 
-      setLeaderboard(rows);
+        correct,
+        wrong,
+        not_attempted,
+      };
+    });
 
-      const mine = rows.find((r) => r.user_id === user.id);
-      if (mine) setMyScore(mine.score);
+    setLeaderboard(rows);
 
+    const mine = rows.find((r) => r.user_id === user.id);
+    if (mine) setMyScore(mine.score);
+
+    // =========================
+    // MY ATTEMPT
+    // =========================
+    const { data: myAttempt, error: attemptErr } = await supabase
+      .from("attempts")
+      .select("id")
+      .eq("room_id", room.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (attemptErr) {
+      console.log("Attempt error:", attemptErr);
+    }
+
+    if (myAttempt) {
       // =========================
-      // MY ATTEMPT
+      // ANSWERS (REVIEW SECTION - unchanged)
       // =========================
-      const { data: myAttempt } = await supabase
-        .from("attempts")
-        .select("id")
-        .eq("room_id", room.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data: ans, error } = await supabase
+        .from("answers")
+        .select(`
+          selected_index,
+          question:questions (
+            question,
+            options,
+            correct_index,
+            order_index
+          )
+        `)
+        .eq("attempt_id", myAttempt.id);
 
-      if (myAttempt) {
-        const { data: ans } = await supabase
-          .from("answers")
-          .select(`
-            selected_index,
-            is_correct,
-            questions(question, options, correct_index, order_index)
-          `)
-          .eq("attempt_id", myAttempt.id);
-
-        const reviewRows: AnswerReview[] = (ans ?? [])
-          .map((a: any) => {
-            const selected = a.selected_index;
-
-            const isNotAttempted =
-              selected === null || selected === -1;
-
-            return {
-              question: a.questions?.question ?? "",
-              options: a.questions?.options ?? [],
-              correct_index: a.questions?.correct_index ?? 0,
-              selected_index: selected,
-              is_correct: a.is_correct,
-              order_index: a.questions?.order_index ?? 0,
-              marks: isNotAttempted
-                ? NOT_ATTEMPTED_MARK
-                : a.is_correct
-                ? POSITIVE_MARK
-                : NEGATIVE_MARK,
-            };
-          })
-          .sort((a, b) => a.order_index - b.order_index);
-
-        setReview(reviewRows);
-
-        // =========================
-        // FINAL SCORE
-        // =========================
-        const totalScore = reviewRows.reduce((acc, r) => {
-          if (r.selected_index === null || r.selected_index === -1) {
-            return acc + NOT_ATTEMPTED_MARK;
-          }
-          return acc + r.marks;
-        }, 0);
-
-        setMyScore(totalScore);
+      if (error) {
+        console.log("Answers error:", error);
       }
 
-      setLoading(false);
-    };
+      const reviewRows: AnswerReview[] = (ans ?? [])
+        .map((a: any) => {
+          const q = a.question;
 
-    load();
-  }, [code, user, navigate]);
+          const selected = a.selected_index;
+          const correct = q?.correct_index;
 
-  // =========================
-  // REALTIME LEADERBOARD
-  // =========================
-  useEffect(() => {
-    if (!roomId) return;
+          const isNotAttempted =
+            selected === null || selected === -1;
 
-    const channel = supabase
-      .channel(`results-${roomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "attempts",
-          filter: `room_id=eq.${roomId}`,
-        },
-        async () => {
-          const { data: attempts } = await supabase
-            .from("attempts")
-            .select(`
-              user_id,
-              score,
-              total,
-              submitted_at,
-              profiles!attempts_user_id_profiles_fkey(display_name)
-            `)
-            .eq("room_id", roomId)
-            .order("score", { ascending: false });
+          const isCorrect =
+            selected !== null &&
+            selected !== -1 &&
+            selected === correct;
 
-          if (attempts) {
-            setLeaderboard(
-              attempts.map((a: any) => ({
-                user_id: a.user_id,
-                display_name: a.profiles?.display_name ?? "Player",
-                score: a.score ?? 0,
-                total: a.total ?? 0,
-                submitted_at: a.submitted_at ?? null,
-              }))
-            );
-          }
+          return {
+            question: q?.question ?? "",
+            options: q?.options ?? [],
+            correct_index: correct ?? 0,
+            selected_index: selected,
+            is_correct: isCorrect,
+            order_index: q?.order_index ?? 0,
+            marks: isNotAttempted
+              ? NOT_ATTEMPTED_MARK
+              : isCorrect
+              ? POSITIVE_MARK
+              : NEGATIVE_MARK,
+          };
+        })
+        .sort((a, b) => a.order_index - b.order_index);
+
+      setReview(reviewRows);
+
+      // =========================
+      // FINAL SCORE (UNCHANGED LOGIC)
+      // =========================
+      const totalScore = reviewRows.reduce((acc, r) => {
+        if (r.selected_index === null || r.selected_index === -1) {
+          return acc + NOT_ATTEMPTED_MARK;
         }
-      )
-      .subscribe();
+        return acc + (r.is_correct ? POSITIVE_MARK : NEGATIVE_MARK);
+      }, 0);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roomId]);
+      setMyScore(totalScore);
+    }
 
-  // =========================
-  // LOADING
-  // =========================
+    setLoading(false);
+  };
+
+  load();
+}, [code, user, navigate]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <div className="flex items-center justify-center py-20 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          Loading results…
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="animate-spin mr-2" />
+          Loading results...
         </div>
       </div>
     );
   }
 
-  // =========================
-  // UI
-  // =========================
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <main className="container max-w-4xl py-10">
-
         {/* SCORE */}
-        <div className="paper-elevated p-8 text-center space-y-2">
+        <div className="paper-elevated p-8 text-center">
           <Trophy className="mx-auto h-10 w-10 text-accent" />
-
-          <h1 className="font-serif text-3xl text-primary">
-            Your Score
-          </h1>
-
-          <div className="text-4xl font-bold text-primary">
-            {myScore}
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            +{POSITIVE_MARK} correct • {NEGATIVE_MARK} wrong • {NOT_ATTEMPTED_MARK} not attempted
-          </p>
+          <h1 className="text-3xl font-bold">Your Score</h1>
+          <div className="text-4xl font-bold text-primary mt-2">{myScore}</div>
         </div>
 
         {/* LEADERBOARD */}
         <section className="mt-8 paper p-6">
-          <h2 className="mb-4 font-serif text-xl text-primary">
-            Leaderboard
-          </h2>
+          <h2 className="text-xl font-bold mb-4">Leaderboard</h2>
 
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y border rounded-md">
             {leaderboard.map((r, i) => (
               <li
                 key={r.user_id}
@@ -257,16 +256,18 @@ export default function Results() {
                   r.user_id === user?.id ? "bg-muted font-semibold" : ""
                 }`}
               >
-                <div className="flex gap-3 items-center">
-                  <span className="h-6 w-6 flex items-center justify-center rounded-full bg-primary text-white text-xs">
-                    {i + 1}
+                <div className="flex flex-col">
+                  <span>
+                    {i + 1}. {r.display_name}
                   </span>
-                  <span>{r.display_name}</span>
+
+                  {/* NEW STATS LINE */}
+                  <span className="text-xs text-muted-foreground mt-1">
+  ✅ {r.correct ?? 0} | ❌ {r.wrong ?? 0} | ⚪ {r.not_attempted ?? 0}
+</span>
                 </div>
 
-                <span className="text-primary font-semibold">
-                  {r.score}
-                </span>
+                <span className="font-bold text-primary">{r.score}</span>
               </li>
             ))}
           </ul>
@@ -275,43 +276,27 @@ export default function Results() {
         {/* REVIEW */}
         {review.length > 0 && (
           <section className="mt-8 space-y-4">
-            <h2 className="font-serif text-xl text-primary">
-              Answer Review
-            </h2>
+            <h2 className="text-xl font-bold">Answer Review</h2>
 
             {review.map((r, i) => (
               <div key={i} className="paper p-5">
-
-                <div className="flex items-start gap-3">
-
+                <div className="flex gap-3">
                   {r.selected_index === null || r.selected_index === -1 ? (
-                    <span className="text-yellow-600 font-semibold">
-                      −2 Not Attempted
+                    <span className="text-yellow-600 font-bold">
+                      Not Attempted
                     </span>
                   ) : r.is_correct ? (
-                    <Check className="mt-0.5 h-5 w-5 text-green-500" />
+                    <Check className="text-green-500" />
                   ) : (
-                    <X className="mt-0.5 h-5 w-5 text-red-500" />
+                    <X className="text-red-500" />
                   )}
 
-                  <div className="flex-1">
-
-                    <div className="mb-2 font-semibold">
-                      Marks:{" "}
-                      <span className={
-                        r.marks > 0
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }>
-                        {r.marks}
-                      </span>
-                    </div>
-
-                    <p className="font-medium text-primary">
+                  <div>
+                    <p className="font-semibold">
                       Q{i + 1}. {r.question}
                     </p>
 
-                    <div className="mt-3 space-y-1 text-sm">
+                    <div className="text-sm mt-2 space-y-1">
                       {r.options.map((opt, idx) => {
                         const isCorrect = idx === r.correct_index;
                         const isPicked = idx === r.selected_index;
@@ -319,41 +304,31 @@ export default function Results() {
                         return (
                           <div
                             key={idx}
-                            className={`px-3 py-1.5 rounded border ${
+                            className={`p-2 border rounded ${
                               isCorrect
-                                ? "bg-green-100 border-green-400 text-green-700"
+                                ? "bg-green-100"
                                 : isPicked
-                                ? "bg-red-100 border-red-400 text-red-700"
-                                : "text-muted-foreground"
+                                  ? "bg-red-100"
+                                  : ""
                             }`}
                           >
-                            <span className="font-semibold">
-                              {String.fromCharCode(65 + idx)}.
-                            </span>{" "}
                             {opt}
-
-                            {isCorrect && " (✓ Correct)"}
-                            {isPicked && !isCorrect && " (✗ Your Answer)"}
                           </div>
                         );
                       })}
                     </div>
-
                   </div>
                 </div>
-
               </div>
             ))}
           </section>
         )}
 
-        {/* BACK */}
         <div className="mt-10 text-center">
-          <Button asChild size="lg">
+          <Button asChild>
             <Link to="/">Back to Home</Link>
           </Button>
         </div>
-
       </main>
     </div>
   );
