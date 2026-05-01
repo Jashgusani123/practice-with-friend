@@ -16,7 +16,6 @@ export async function createRoom(
   durationSeconds = 1800
 ) {
   const code = generateRoomCode();
-
   const normalizedSubject = subject.toLowerCase();
 
   // =========================
@@ -30,13 +29,20 @@ export async function createRoom(
   const usedIds = history?.map((h) => h.question_id) || [];
 
   // =========================
-  // 2. ENGLISH LOGIC (FIXED)
+  // CONFIG: QUESTION LIMIT
   // =========================
+  const QUESTION_LIMIT =
+    normalizedSubject === "mock"
+      ? 100
+      : 10;
+
   let selectedQuestions: any[] = [];
   let passageId: string | null = null;
 
+  // =========================
+  // 2. ENGLISH LOGIC
+  // =========================
   if (normalizedSubject === "english") {
-    // 👉 get all passages
     const { data: passages } = await supabase
       .from("passages")
       .select("id");
@@ -45,12 +51,10 @@ export async function createRoom(
       throw new Error("No passages available");
     }
 
-    // 🔀 shuffle passages
     const shuffledPassages = [...passages].sort(
       () => Math.random() - 0.5
     );
 
-    // 👉 find passage with UNUSED questions
     for (const p of shuffledPassages) {
       const { data: qs } = await supabase
         .from("questions")
@@ -61,10 +65,10 @@ export async function createRoom(
         (q) => !usedIds.includes(q.id)
       );
 
-      if (filtered.length >= 10) {
+      if (filtered.length >= QUESTION_LIMIT) {
         selectedQuestions = filtered
           .sort(() => Math.random() - 0.5)
-          .slice(0, 10);
+          .slice(0, QUESTION_LIMIT);
 
         passageId = p.id;
         break;
@@ -77,7 +81,7 @@ export async function createRoom(
   }
 
   // =========================
-  // 3. OTHER SUBJECTS
+  // 3. OTHER SUBJECTS (INCLUDING MOCK)
   // =========================
   else {
     let query = supabase
@@ -103,7 +107,7 @@ export async function createRoom(
 
     selectedQuestions = available
       .sort(() => Math.random() - 0.5)
-      .slice(0, 10);
+      .slice(0, QUESTION_LIMIT);
   }
 
   // =========================

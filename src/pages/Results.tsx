@@ -18,7 +18,7 @@ interface AnswerReview {
   question: string;
   options: string[];
   correct_index: number;
-  selected_index: number;
+  selected_index: number | null;
   is_correct: boolean;
   order_index: number;
   marks: number;
@@ -26,6 +26,7 @@ interface AnswerReview {
 
 const POSITIVE_MARK = 2;
 const NEGATIVE_MARK = -0.5;
+const NOT_ATTEMPTED_MARK = -2;
 
 export default function Results() {
   const { code } = useParams<{ code: string }>();
@@ -47,7 +48,6 @@ export default function Results() {
     const load = async () => {
       setLoading(true);
 
-      // ROOM
       const { data: room } = await supabase
         .from("rooms")
         .select("id")
@@ -61,7 +61,9 @@ export default function Results() {
 
       setRoomId(room.id);
 
+      // =========================
       // LEADERBOARD
+      // =========================
       const { data: attempts } = await supabase
         .from("attempts")
         .select(`
@@ -87,7 +89,9 @@ export default function Results() {
       const mine = rows.find((r) => r.user_id === user.id);
       if (mine) setMyScore(mine.score);
 
+      // =========================
       // MY ATTEMPT
+      // =========================
       const { data: myAttempt } = await supabase
         .from("attempts")
         .select("id")
@@ -106,21 +110,37 @@ export default function Results() {
           .eq("attempt_id", myAttempt.id);
 
         const reviewRows: AnswerReview[] = (ans ?? [])
-          .map((a: any) => ({
-            question: a.questions?.question ?? "",
-            options: a.questions?.options ?? [],
-            correct_index: a.questions?.correct_index ?? 0,
-            selected_index: a.selected_index,
-            is_correct: a.is_correct,
-            order_index: a.questions?.order_index ?? 0,
-            marks: a.is_correct ? POSITIVE_MARK : NEGATIVE_MARK,
-          }))
+          .map((a: any) => {
+            const selected = a.selected_index;
+
+            const isNotAttempted =
+              selected === null || selected === -1;
+
+            return {
+              question: a.questions?.question ?? "",
+              options: a.questions?.options ?? [],
+              correct_index: a.questions?.correct_index ?? 0,
+              selected_index: selected,
+              is_correct: a.is_correct,
+              order_index: a.questions?.order_index ?? 0,
+              marks: isNotAttempted
+                ? NOT_ATTEMPTED_MARK
+                : a.is_correct
+                ? POSITIVE_MARK
+                : NEGATIVE_MARK,
+            };
+          })
           .sort((a, b) => a.order_index - b.order_index);
 
         setReview(reviewRows);
 
-        // FINAL SCORE CALCULATION
+        // =========================
+        // FINAL SCORE
+        // =========================
         const totalScore = reviewRows.reduce((acc, r) => {
+          if (r.selected_index === null || r.selected_index === -1) {
+            return acc + NOT_ATTEMPTED_MARK;
+          }
           return acc + r.marks;
         }, 0);
 
@@ -183,13 +203,13 @@ export default function Results() {
   }, [roomId]);
 
   // =========================
-  // LOADING UI
+  // LOADING
   // =========================
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <div className="container flex items-center justify-center py-20 text-muted-foreground">
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Loading results…
         </div>
@@ -207,15 +227,19 @@ export default function Results() {
       <main className="container max-w-4xl py-10">
 
         {/* SCORE */}
-        <div className="paper-elevated p-8 text-center">
+        <div className="paper-elevated p-8 text-center space-y-2">
           <Trophy className="mx-auto h-10 w-10 text-accent" />
 
-          <h1 className="mt-3 font-serif text-3xl text-primary">
-            Your Score: {myScore}
+          <h1 className="font-serif text-3xl text-primary">
+            Your Score
           </h1>
 
-          <p className="mt-2 text-sm text-muted-foreground">
-            +{POSITIVE_MARK} correct | {NEGATIVE_MARK} wrong
+          <div className="text-4xl font-bold text-primary">
+            {myScore}
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            +{POSITIVE_MARK} correct • {NEGATIVE_MARK} wrong • {NOT_ATTEMPTED_MARK} not attempted
           </p>
         </div>
 
@@ -225,21 +249,22 @@ export default function Results() {
             Leaderboard
           </h2>
 
-          <ul className="divide-y">
+          <ul className="divide-y rounded-md border">
             {leaderboard.map((r, i) => (
               <li
                 key={r.user_id}
-                className={`flex justify-between py-3 ${
-                  r.user_id === user?.id ? "font-semibold" : ""
+                className={`flex justify-between p-3 ${
+                  r.user_id === user?.id ? "bg-muted font-semibold" : ""
                 }`}
               >
-                <div className="flex gap-3">
-                  <span className="h-6 w-6 rounded-full bg-muted text-center text-xs font-bold">
+                <div className="flex gap-3 items-center">
+                  <span className="h-6 w-6 flex items-center justify-center rounded-full bg-primary text-white text-xs">
                     {i + 1}
                   </span>
                   <span>{r.display_name}</span>
                 </div>
-                <span className="text-primary">
+
+                <span className="text-primary font-semibold">
                   {r.score}
                 </span>
               </li>
@@ -259,7 +284,11 @@ export default function Results() {
 
                 <div className="flex items-start gap-3">
 
-                  {r.is_correct ? (
+                  {r.selected_index === null || r.selected_index === -1 ? (
+                    <span className="text-yellow-600 font-semibold">
+                      −2 Not Attempted
+                    </span>
+                  ) : r.is_correct ? (
                     <Check className="mt-0.5 h-5 w-5 text-green-500" />
                   ) : (
                     <X className="mt-0.5 h-5 w-5 text-red-500" />
@@ -267,20 +296,21 @@ export default function Results() {
 
                   <div className="flex-1">
 
-                    {/* MARKS */}
                     <div className="mb-2 font-semibold">
                       Marks:{" "}
-                      <span className={r.is_correct ? "text-green-600" : "text-red-600"}>
+                      <span className={
+                        r.marks > 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }>
                         {r.marks}
                       </span>
                     </div>
 
-                    {/* QUESTION */}
                     <p className="font-medium text-primary">
                       Q{i + 1}. {r.question}
                     </p>
 
-                    {/* OPTIONS */}
                     <div className="mt-3 space-y-1 text-sm">
                       {r.options.map((opt, idx) => {
                         const isCorrect = idx === r.correct_index;
@@ -317,7 +347,7 @@ export default function Results() {
           </section>
         )}
 
-        {/* BACK HOME */}
+        {/* BACK */}
         <div className="mt-10 text-center">
           <Button asChild size="lg">
             <Link to="/">Back to Home</Link>
