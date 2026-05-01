@@ -13,7 +13,7 @@ export async function createRoom(
   hostId: string,
   subject: string,
   chapter: string | null = null,
-  durationSeconds = 1800
+  durationSeconds = 3600
 ) {
   const code = generateRoomCode();
   const normalizedSubject = subject.toLowerCase();
